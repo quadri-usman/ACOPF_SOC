@@ -1,0 +1,108 @@
+#Impedance values
+R12, X12 = 0.01, 0.05 #Line between Bus 1 and Bus 2
+R13, X13 = 0.015, 0.05 #Line between Bus 1 and Bus 3
+R23, X23 = 0.02, 0.06 #Line between Bus 2 and Bus 3 
+
+#Calculating conductance and susceptance for each line
+G12 = R12 / (R12**2 + X12**2)
+G13 = R13 / (R13**2 + X13**2)
+G23 = R23 / (R23**2 + X23**2)
+B12 = -X12 / (R12**2 + X12**2)
+B13 = -X13 / (R13**2 + X13**2)
+B23 = -X23 / (R23**2 + X23**2)
+
+#Power and Voltage Limit
+Pd3 = 1.0 #Real power demand at bus 3
+Qd3 = 0.5 #Reactive power demand at bus 3
+V_min = 0.95 #Minimum voltage magnitue at all buses
+V_max = 1.05 #Maximum voltage magnitude at all buses
+S_max = 1.0 #Apparent power limits on transmission lines
+
+#Generation Constraints
+Pg1_min, Pg1_max = 0.1, 2.0 #Real power generation limits at bus 1
+Pg2_min, Pg2_max = 0.1, 1.5 #Real power generation limits at bus 2
+Qg1_min, Qg1_max = -1.0, 1.0 #Reactive power generation limits at bus 1
+Qg2_min, Qg2_max = -0.5, 0.8 #Reactive power generation limits at bus 2
+
+#Defining variables for the generating units and volatges
+Pg1 = cp.Variable()
+Pg2 = cp.Variable()
+Qg1 = cp.Variable()
+Qg2 = cp.Variable()
+V2 = cp.Variable()
+V3 = cp.Variable()
+theta2 = cp.Variable()
+theta3 = cp.Variable()
+
+#Stating the slakc vlaues
+V1 = 1.0 # Voltage magnitude at Slack bus (bus 1)
+theta1 = 0.0 # Voltage angle at Slack bus (bus 1)
+#Pd3 = cp.Variable() #Real power demand at bus 3
+#Qd3 = cp.Variable() #Reactive power demand at bus 3
+
+#Auxilliary variables for Real and reactive power flows
+x12, y12 = cp.Variable(), cp.Variable() #Real and reactive power flow from Bus 1 to Bus 2
+x13, y13 = cp.Variable(), cp.Variable() #Real and reactive power flow from Bus 1 to Bus 3
+x23, y23 = cp.Variable(), cp.Variable() #Real and reactive power flow from Bus 2 to Bus 3
+
+#Auxilliary varibles for SOC relaxation
+z12 = cp.Variable() #for V1 * V2
+z13 = cp.Variable() #for V1 * V3
+z23 = cp.Variable() #for V2 * V3
+
+#Objective Function
+Cost = 0.01 * Pg1**2 + 10 * Pg1 + 0.015 * Pg2**2 + 8 * Pg2
+#Constraints
+constraint = [
+    #Real power balance at each bus:
+    Pg1 == x12 + x13,
+    Pg2 == -x12 + x23,
+    Pd3 == x13 + x23,
+    Qg1 == y12 + y13,
+    Qg2 == -y12 + y23,
+    Qd3 == y13 + y23,
+    #SOC Relaxation Constraints for voltage product
+    cp.SOC(z12, cp.hstack([V1, V2])),
+    cp.SOC(z13, cp.hstack([V1, V3])),
+    cp.SOC(z23, cp.hstack([V2, V3])),
+    #SOC Relaxation Constraints for power flows
+    cp.SOC(z12, cp.hstack([x12, y12])),
+    cp.SOC(z13, cp.hstack([x13, y13])),
+    cp.SOC(z23, cp.hstack([x23, y23])),
+    #SOC Relaxation Constraints for Apparent power flow limits
+    cp.SOC(S_max, cp.hstack([x12, y12])),
+    cp.SOC(S_max, cp.hstack([x13, y13])),
+    cp.SOC(S_max, cp.hstack([x23, y23])),
+    #Generation limits for real power:
+    Pg1 >= Pg1_min, Pg1 <= Pg1_max,
+    Pg2 >= Pg2_min, Pg2 <= Pg2_max,
+    #Generation limits for reactive power:
+    Qg1 >= Qg1_min, Qg1 <= Qg1_max,
+    Qg2 >= Qg2_min, Qg2 <= Qg2_max,
+    #Voltage magnitude constraints at buses 2 and 3
+    V2 >= V_min, V2 <= V_max,
+    V3 >= V_min, V3 <= V_max,
+    #Voltage angles calculaton
+    theta2 == theta1 - X12 * x12,
+    theta3 == theta1 - X13 * x13,    
+]
+#Formulating the problem and solve
+problem = cp.Problem(cp.Minimize(Cost), constraint)
+problem.solve()
+#Output the result
+print(Pg1.value)
+print(Qg1.value)
+print(Pg2.value)
+print(Qg2.value)
+print(V1)
+print(V2.value)
+print(V3.value)
+print(theta1)
+print(theta2.value)
+print(theta3.value)
+print(x12.value)
+print(x13.value)
+print(x23.value)
+print(y12.value)
+print(y13.value)
+print(y23.value)
